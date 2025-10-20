@@ -134,7 +134,7 @@ kvmpa(uint64 va)
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
-
+// kernel_pagetable改为myproc()->kernelpt
   pte = walk(myproc()->kernelpt, va, 0); 
   if(pte == 0)
     panic("kvmpa");

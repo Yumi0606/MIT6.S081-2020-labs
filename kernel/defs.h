@@ -159,7 +159,9 @@ int             uartgetc(void);
 
 // vm.c
 void            kvminit(void);
-void            kvminithart(void);
+void            kvminithart(void); 
+pagetable_t     proc_kpt_init(void); // 用于内核页表的初始化
+void            proc_inithart(pagetable_t); // 将进程的内核页表保存到SATP寄存器
 uint64          kvmpa(uint64);
 void            kvmmap(uint64, uint64, uint64, int);
 int             mappages(pagetable_t, uint64, uint64, uint64, int);

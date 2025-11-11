@@ -20,6 +20,23 @@ static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
+void
+proc_freekernelpt(pagetable_t kernelpt)
+{
+  // similar to the freewalk method
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = kernelpt[i];
+    if(pte & PTE_V){
+      kernelpt[i] = 0;
+      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        uint64 child = PTE2PA(pte);
+        proc_freekernelpt((pagetable_t)child);
+      }
+    }
+  }
+  kfree((void*)kernelpt);
+}
 
 // initialize the proc table at boot time.
 void
@@ -134,7 +151,11 @@ found:
   if(pa == 0)
     panic("kalloc");
   uint64 va = KSTACK((int) (p - proc));
-  kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+
+  if(mappages(p->kernelpt, va, PGSIZE, (uint64)pa, PTE_R | PTE_W) < 0) {
+  kfree(pa);
+  panic("kstack mapping failed");
+}
   p->kstack = va;
 
   // Set up new context to start executing at forkret,
@@ -167,8 +188,17 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
    // free the kernel stack in the RAM
-  uvmunmap(p->kernelpt, p->kstack, 1, 1);
-  p->kstack = 0;
+    // 修正：内核栈应该在全局内核页表中取消映射
+  if(p->kstack) {
+    uint64 va = KSTACK((int)(p - proc));
+    // 使用 uvmunmap 在全局内核页表中取消映射
+    uvmunmap(p->kernelpt, va, 1, 1);  // 释放物理页
+    p->kstack = 0;
+  }
+//释放进程的内核页表
+  if(p->kernelpt)
+    proc_freekernelpt(p->kernelpt); 
+  p->kernelpt = 0;
 }
 
 // Create a user page table for a given process,
@@ -724,20 +754,3 @@ procdump(void)
   }
 }
 
-void
-proc_freekernelpt(pagetable_t kernelpt)
-{
-  // similar to the freewalk method
-  // there are 2^9 = 512 PTEs in a page table.
-  for(int i = 0; i < 512; i++){
-    pte_t pte = kernelpt[i];
-    if(pte & PTE_V){
-      kernelpt[i] = 0;
-      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0){
-        uint64 child = PTE2PA(pte);
-        proc_freekernelpt((pagetable_t)child);
-      }
-    }
-  }
-  kfree((void*)kernelpt);
-}

@@ -74,6 +74,10 @@ exec(char *path, char **argv)
   uvmclear(pagetable, sz-2*PGSIZE);
   sp = sz;
   stackbase = sp - PGSIZE;
+  // 清除旧的内核页表映射
+  uvmunmapinkpt(p->kernelpt, 0, p->sz);
+  // 添加复制逻辑
+  u2kvmcopy(pagetable, p->kernelpt, 0, sz);
 
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
@@ -97,6 +101,11 @@ exec(char *path, char **argv)
   if(copyout(pagetable, sp, (char *)ustack, (argc+1)*sizeof(uint64)) < 0)
     goto bad;
 
+    
+  // 检查程序大小是否超过 PLIC 限制
+  if(sz >= PLIC){
+    goto bad;
+  }
   // arguments to user main(argc, argv)
   // argc is returned via the system call return
   // value, which goes in a0.

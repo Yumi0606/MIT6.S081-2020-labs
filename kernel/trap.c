@@ -49,8 +49,8 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
-  if(r_scause() == 8){
+  uint64 cause = r_scause();
+  if(cause == 8){
     // system call
 
     if(p->killed)
@@ -67,8 +67,34 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(cause == 13 || cause == 15) {
+      uint64 fault_va = r_stval();
+
+    // 获取当前进程
+    struct proc *p = myproc();
+
+    // 判断是否是合法的用户可分配懒区域：在栈和 sz 之间，且按页向上取整后不超过 sz
+    if (PGROUNDDOWN(fault_va) >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE && 
+        PGROUNDDOWN(fault_va) < p->sz) {
+        
+        // 分配物理页
+        char *pa = kalloc();
+        if (pa == 0) {
+            p->killed = 1; // 内存不足，杀死进程
+        } else {
+            memset(pa, 0, PGSIZE); // 清零新页
+            uint64 vpn = PGROUNDDOWN(fault_va);
+            if (mappages(p->pagetable, vpn, PGSIZE, (uint64)pa, PTE_R | PTE_W | PTE_U) != 0) {
+                kfree(pa);
+                p->killed = 1; // 映射失败，杀死进程
+            }
+        }
+    } else {
+        // 非法访问（比如访问了远低于栈或超过 sz 的地方）
+        p->killed = 1;
+    }
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause %p pid=%d\n", cause, p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }

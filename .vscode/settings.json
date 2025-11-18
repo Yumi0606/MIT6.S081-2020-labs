@@ -3,6 +3,7 @@
         "*.cjson": "jsonc",
         "*.wxss": "css",
         "*.wxs": "javascript",
-        "defs.h": "c"
+        "defs.h": "c",
+        "syscall.h": "c"
     }
 }

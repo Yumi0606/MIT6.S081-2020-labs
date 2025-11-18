@@ -115,7 +115,12 @@ sys_sigalarm(void) {
 
 uint64
 sys_sigreturn(void) {
-    // struct proc *p = myproc();
-    // test0 可以暂时直接返回 0
+    struct proc *p = myproc();
+    if(p->alarm_trapframe == 0) return -1;
+
+    // 恢复用户寄存器状态
+    memmove(p->trapframe, p->alarm_trapframe, sizeof(struct trapframe));
+    p->is_alarming = 0;
+    p->ticks_count = 0;  // 重新开始计时
     return 0;
 }

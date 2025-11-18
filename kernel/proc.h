@@ -107,4 +107,6 @@ struct proc {
   int alarm_interval;          // 报警间隔
   void (*alarm_handler)();     // 报警处理函数
   int ticks_count;             // 两次报警间的滴答计数
+  int is_alarming;                    // 是否正在处理 alarm
+  struct trapframe *alarm_trapframe;  // 用于保存陷入时的 trapframe
 };

@@ -70,21 +70,36 @@ argaddr(int n, uint64 *ip)
   *ip = argraw(n);
   struct proc* p = myproc();
 
-  // 处理向系统调用传入lazy allocation地址的情况
-  if(walkaddr(p->pagetable, *ip) == 0) {
-    if(PGROUNDUP(p->trapframe->sp) - 1 < *ip && *ip < p->sz) {
-      char* pa = kalloc();
-      if(pa == 0)
-        return -1;
+  // 如果该地址已经是合法映射的，直接通过
+  if (walkaddr(p->pagetable, *ip) != 0) {
+    return 0; // 已映射，没问题
+  }
+
+  // 仅当地址落在用户栈范围内时，才尝试懒分配
+  if (*ip >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE && *ip < p->sz) {
+    uint64 vpn = PGROUNDDOWN(*ip);
+    pte_t *pte = walk(p->pagetable, vpn, 0);
+
+    if (pte != 0 && (*pte & PTE_V) != 0) {
+      // 已经映射，无需再处理
+      return 0;
+    } else {
+      // 真的未映射，进行懒分配
+      char *pa = kalloc();
+      if (pa == 0)
+        return -1; // 内存不足
+
       memset(pa, 0, PGSIZE);
 
-      if(mappages(p->pagetable, PGROUNDDOWN(*ip), PGSIZE, (uint64)pa, PTE_R | PTE_W | PTE_X | PTE_U) != 0) {
+      // 映射为可读写用户页
+      if (mappages(p->pagetable, vpn, PGSIZE, (uint64)pa, PTE_R | PTE_W | PTE_X | PTE_U) != 0) {
         kfree(pa);
-        return -1;
+        return -1; // 映射失败
       }
-    } else {
-      return -1;
     }
+  } else {
+    // 地址不在栈范围内，非法
+    return -1;
   }
 
   return 0;

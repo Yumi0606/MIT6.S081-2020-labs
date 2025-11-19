@@ -308,31 +308,32 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
-  pte_t *pte;
-  uint64 pa, i;
-  uint flags;
-  char *mem;
+    pte_t *pte;
+    uint64 pa, i;
+    uint flags;
 
-  for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
-    pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+    for (i = 0; i < sz; i += PGSIZE) {
+        if ((pte = walk(old, i, 0)) == 0)
+            panic("uvmcopy: pte should exist");
+        if ((*pte & PTE_V) == 0)
+            panic("uvmcopy: page not present");
+        pa = PTE2PA(*pte);
+        flags = PTE_FLAGS(*pte);
+
+        if (flags & PTE_W) {
+            // 可写页：设为只读 + COW
+            flags = (flags & ~PTE_W) | PTE_F;
+            *pte = PA2PTE(pa) | flags;
+        }
+
+        if (mappages(new, i, PGSIZE, pa, flags) != 0) {
+            uvmunmap(new, 0, i / PGSIZE, 1);
+            return -1;
+        }
+
+        kaddrefcnt((void*)pa); // 增加引用计数
     }
-  }
-  return 0;
-
- err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
-  return -1;
+    return 0;
 }
 
 // mark a PTE invalid for user access.
@@ -359,6 +360,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
+
+    // 处理COW页面的情况
+    if(cowpage(pagetable, va0) == 0) {
+      // 更换目标物理地址
+      pa0 = (uint64)cowalloc(pagetable, va0);
+    }
+
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

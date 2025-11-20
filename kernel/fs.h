@@ -28,7 +28,7 @@ struct superblock {
 #define NDINDIRECT ((BSIZE / sizeof(uint)) * (BSIZE / sizeof(uint)))
 #define MAXFILE (NDIRECT + NINDIRECT + NDINDIRECT)
 #define NADDR_PER_BLOCK (BSIZE / sizeof(uint))  // 一个块中的地址数量
-
+#define MAX_SYMLINK_DEPTH 10
 
 // On-disk inode structure
 struct dinode {

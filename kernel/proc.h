@@ -81,11 +81,23 @@ struct trapframe {
 };
 
 enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+#define NVMA 16
+
+struct vm_area {
+  int used;           // 是否已分配
+  uint64 addr;        // 映射的起始虚拟地址
+  int len;            // 映射长度（字节）
+  int prot;           // 权限：PROT_READ/WRITE/EXEC
+  int flags;          // 标志：MAP_SHARED/PRIVATE
+  int vfd;            // 文件描述符
+  struct file *vfile; // 映射的文件
+  int offset;         // 文件偏移（本实验中为 0）
+};
 
 // Per-process state
 struct proc {
   struct spinlock lock;
-
+  struct vm_area vma[NVMA];  // 每个进程的虚拟内存区域表
   // p->lock must be held when using these:
   enum procstate state;        // Process state
   struct proc *parent;         // Parent process
